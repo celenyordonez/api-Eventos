@@ -1,19 +1,19 @@
-import { Request, Response, Router } from "express";
+import { Router, Request, Response } from "express";
 import prisma from "../prismaClient";
 
-const eventoRouter = Router();
+const router = Router();
 
-// Criar um novo evento
-eventoRouter.post("/", async (req: Request, res: Response) => {
+// Criar evento
+router.post("/", async (req: Request, res: Response) => {
   const { nome, descricao, local, palestrantes } = req.body;
 
-  try {
-    if (!nome || !descricao || !local || !Array.isArray(palestrantes) || palestrantes.length === 0) {
-      return res.status(400).json({
-        mensagem: "Preencha todos os campos para cadastrar o evento."
-      });
-    }
+  if (!nome || !descricao || !local || !Array.isArray(palestrantes) || palestrantes.length === 0) {
+    return res.status(400).json({
+      mensagem: "Preencha todos os campos do evento."
+    });
+  }
 
+  try {
     const novoEvento = await prisma.evento.create({
       data: {
         nome,
@@ -23,7 +23,7 @@ eventoRouter.post("/", async (req: Request, res: Response) => {
           create: palestrantes.map((id: number) => ({
             palestrante: {
               connect: {
-                id: Number(id)
+                id
               }
             }
           }))
@@ -38,23 +38,21 @@ eventoRouter.post("/", async (req: Request, res: Response) => {
       }
     });
 
-    res.status(201).json({
-      mensagem: "cadastro concluído com sucesso",
+    return res.status(201).json({
+      mensagem: "Evento cadastrado com sucesso.",
       evento: novoEvento
     });
-
   } catch (error) {
-    console.error("Erro no cadastro:", error);
+    console.error(error);
 
-    res.status(500).json({
+    return res.status(500).json({
       mensagem: "Não foi possível cadastrar o evento."
     });
   }
 });
 
-
-// Mostrar todos os eventos
-eventoRouter.get("/", async (_req: Request, res: Response) => {
+// Listar eventos
+router.get("/", async (_req: Request, res: Response) => {
   try {
     const listaEventos = await prisma.evento.findMany({
       include: {
@@ -69,26 +67,30 @@ eventoRouter.get("/", async (_req: Request, res: Response) => {
       }
     });
 
-    res.status(200).json(listaEventos);
-
+    return res.status(200).json(listaEventos);
   } catch (error) {
-    console.error("Erro ao carregar eventos:", error);
+    console.error(error);
 
-    res.status(500).json({
-      mensagem: "Não foi possível carregar os eventos."
+    return res.status(500).json({
+      mensagem: "Não foi possível listar os eventos."
     });
   }
 });
 
+// Buscar evento pelo ID
+router.get("/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
 
-// Procurar um evento específico
-eventoRouter.get("/:id", async (req: Request, res: Response) => {
-  const eventoId = Number(req.params.id);
+  if (Number.isNaN(id)) {
+    return res.status(400).json({
+      mensagem: "ID do evento inválido."
+    });
+  }
 
   try {
-    const resultado = await prisma.evento.findUnique({
+    const evento = await prisma.evento.findUnique({
       where: {
-        id: eventoId
+        id
       },
       include: {
         palestrantes: {
@@ -99,68 +101,71 @@ eventoRouter.get("/:id", async (req: Request, res: Response) => {
       }
     });
 
-    if (!resultado) {
-      return res.status(404).json({
-        mensagem: "Evento não encontrado."
-      });
-    }
-
-    res.status(200).json(resultado);
-
-  } catch (error) {
-    console.error("Erro na busca:", error);
-
-    res.status(500).json({
-      mensagem: "Erro ao consultar o evento."
-    });
-  }
-});
-
-
-// Alterar um evento
-eventoRouter.put("/:id", async (req: Request, res: Response) => {
-  const eventoId = Number(req.params.id);
-  const { nome, descricao, local, palestrantes } = req.body;
-
-  try {
-    if (!nome || !descricao || !local || !Array.isArray(palestrantes) || palestrantes.length === 0) {
-      return res.status(400).json({
-        mensagem: "Preencha todos os campos para continuar."
-      });
-    }
-
-    const evento = await prisma.evento.findUnique({
-      where: {
-        id: eventoId
-      }
-    });
-
     if (!evento) {
       return res.status(404).json({
         mensagem: "Evento não encontrado."
       });
     }
 
-    // Primeiro retiramos os vínculos antigos
-    await prisma.eventoPalestrante.deleteMany({
+    return res.status(200).json(evento);
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      mensagem: "Não foi possível buscar o evento."
+    });
+  }
+});
+
+// Editar evento
+router.put("/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const { nome, descricao, local, palestrantes } = req.body;
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({
+      mensagem: "ID do evento inválido."
+    });
+  }
+
+  if (!nome || !descricao || !local || !Array.isArray(palestrantes) || palestrantes.length === 0) {
+    return res.status(400).json({
+      mensagem: "Preencha todos os campos do evento."
+    });
+  }
+
+  try {
+    const eventoAtual = await prisma.evento.findUnique({
       where: {
-        eventoId
+        id
       }
     });
 
-    const eventoAlterado = await prisma.evento.update({
+    if (!eventoAtual) {
+      return res.status(404).json({
+        mensagem: "Evento não encontrado."
+      });
+    }
+
+    await prisma.eventoPalestrante.deleteMany({
       where: {
-        id: eventoId
+        eventoId: id
+      }
+    });
+
+    const eventoAtualizado = await prisma.evento.update({
+      where: {
+        id
       },
       data: {
         nome,
         descricao,
         local,
         palestrantes: {
-          create: palestrantes.map((id: number) => ({
+          create: palestrantes.map((palestranteId: number) => ({
             palestrante: {
               connect: {
-                id: Number(id)
+                id: palestranteId
               }
             }
           }))
@@ -175,29 +180,33 @@ eventoRouter.put("/:id", async (req: Request, res: Response) => {
       }
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       mensagem: "Evento atualizado com sucesso.",
-      evento: eventoAlterado
+      evento: eventoAtualizado
     });
-
   } catch (error) {
-    console.error("Erro ao editar:", error);
+    console.error(error);
 
-    res.status(500).json({
+    return res.status(500).json({
       mensagem: "Não foi possível atualizar o evento."
     });
   }
 });
 
+// Excluir evento
+router.delete("/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
 
-// Apagar um evento
-eventoRouter.delete("/:id", async (req: Request, res: Response) => {
-  const eventoId = Number(req.params.id);
+  if (Number.isNaN(id)) {
+    return res.status(400).json({
+      mensagem: "ID do evento inválido."
+    });
+  }
 
   try {
     const evento = await prisma.evento.findUnique({
       where: {
-        id: eventoId
+        id
       }
     });
 
@@ -207,23 +216,28 @@ eventoRouter.delete("/:id", async (req: Request, res: Response) => {
       });
     }
 
-    await prisma.evento.delete({
+    await prisma.eventoPalestrante.deleteMany({
       where: {
-        id: eventoId
+        eventoId: id
       }
     });
 
-    res.status(200).json({
-      mensagem: "Evento excluído com sucesso."
+    await prisma.evento.delete({
+      where: {
+        id
+      }
     });
 
+    return res.status(200).json({
+      mensagem: "Evento removido com sucesso."
+    });
   } catch (error) {
-    console.error("Erro ao excluir:", error);
+    console.error(error);
 
-    res.status(500).json({
+    return res.status(500).json({
       mensagem: "Não foi possível excluir o evento."
     });
   }
 });
 
-export default eventoRouter;
+export default router;
