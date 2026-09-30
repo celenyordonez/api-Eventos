@@ -1,0 +1,40 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Evento {
+  id           Int               @id @default(autoincrement())
+  nome         String
+  descricao    String
+  local        String
+ 
+  palestrantes EventoPalestrante[]
+}
+ 
+model Palestrante {
+  id           Int               @id @default(autoincrement())
+  nome         String
+  email        String   @unique
+ 
+  eventos      EventoPalestrante[]
+}
+ 
+model EventoPalestrante {
+  id            Int @id @default(autoincrement())
+ 
+  eventoId      Int
+  palestranteId Int
+ 
+  evento        Evento      @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  palestrante   Palestrante @relation(fields: [palestranteId], references: [id], onDelete: Cascade)
+ 
+  @@unique([eventoId, palestranteId])
+}
+
+
